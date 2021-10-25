@@ -1,6 +1,9 @@
+# -*- coding: utf-8 -*-
 
 import os
 import sys
+
+# Standard imports.
 
 import argparse
 import json
@@ -8,10 +11,24 @@ import shutil
 import signal
 import time
 
+# Imports from UR's hpclib.
+
 from   dorunrun import dorunrun, ExitCode
 import linuxutils
 from   sqlitedb import SQLiteDB
 from   urdecorators import show_exceptions_and_frames as trap
+
+###
+# Credits
+###
+__author__ = 'George Flanagin'
+__copyright__ = 'Copyright 2021'
+__credits__ = None
+__version__ = 1.0
+__maintainer__ = 'George Flanagin'
+__email__ = ['me@georgeflanagin.com', 'gflanagin@richmond.edu']
+__status__ = 'Early production'
+__license__ = 'MIT'
 
 #################################################
 # This program has a lot of static data
@@ -19,23 +36,31 @@ from   urdecorators import show_exceptions_and_frames as trap
 
 caught_signals = [  signal.SIGINT, signal.SIGQUIT,
                     signal.SIGUSR1, signal.SIGUSR2, signal.SIGTERM ]
+
+# This is the ACT program that gathers data from nodes.
 exe=shutil.which('cv-stats')
+# Request the info in JSON.
 exe_statement=f"{exe} --nodes {{}} --format json"
+
+# There is only one thing we do; insert a few rows.
 sql_statement="""INSERT INTO FACTS (t, node, point, watts) 
     VALUES (?, ?, ?, ?)"""
+
+# These are what we search for in the JSON blob.
 wattage_keys = (
     'power.cpu_watts', 'power.memory_watts', 'power.node_watts',
     )
+
+# Shorter names in the database.
 db_keys = ('c', 'm', 't', )
 db_names = dict(zip(wattage_keys, db_keys))
 
 ##################################################
-# But there is only one global, and it is needed
+# There are only two globals, and this one is needed
 # by the signal handler that, otherwise, cannot
 # access it.
 ##################################################
 db_handle = None
-
 
 ##################################################
 # Intercept signals and die gracefully, unlike
@@ -53,7 +78,7 @@ def handler(signum:int, stack:object=None) -> None:
             db_handle.commit()
             db_handle.db.close()
         except Exception as e:
-            sys.stderr.write(f"Error on exit {e}")
+            sys.stderr.write(f"Error on exit {e}\n")
             sys.exit(os.EX_IOERR)
         else:
             sys.exit(os.EX_OK)
@@ -61,13 +86,14 @@ def handler(signum:int, stack:object=None) -> None:
         return
 
 
-def collect_power_data(db:object, nodenames:str, node_dict:dict) -> int:
+def collect_power_data(db:object, node_dict:dict) -> int:
     """
     Use ACT's tools to poll the nodes and write the fact table
     of the database.
     """
-    stmt=exe_statement.format(nodenames)
-    blob=json.loads(dorunrun(stmt, return_datatype=str).strip())
+    global exe_statement
+    blob=json.loads(dorunrun(
+        exe_statement, return_datatype=str).strip())
 
     #########################################################
     # The times for reading each node are not significantly
@@ -94,16 +120,19 @@ def veryhungrycluster_main(myargs:argparse.Namespace) -> int:
     This function just manages the loop. 
     """
     global db_handle
+    global exe_statement
 
     # Get an explicit list of node names in case the "all" 
     # partition is undefined in this environment.
     nodeinfo = dorunrun('sinfo -o "%n"', 
         return_datatype=str).strip().split('\n')[1:]
     nodenames = ",".join(nodeinfo)
+    myargs.verbose and print(f"querying {nodenames}")
+    exe_statement=exe_statement.format(nodenames)
+
     nodenumbers = tuple([ int(_[-2:]) for _ in nodeinfo ]) 
     node_dict = dict(zip(nodeinfo, nodenumbers))
 
-    myargs.verbose and print(f"querying {nodenames}")
     db_handle = db = SQLiteDB(myargs.db)
     myargs.verbose and print(f"Database {myargs.db} open")
     
@@ -111,7 +140,7 @@ def veryhungrycluster_main(myargs:argparse.Namespace) -> int:
     n=0
     while not error and n < myargs.n:
         n += 1
-        error = collect_power_data(db, nodenames, node_dict)
+        error = collect_power_data(db, node_dict)
         time.sleep(myargs.freq)
     
     return error
