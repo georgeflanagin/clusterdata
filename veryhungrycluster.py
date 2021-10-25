@@ -25,7 +25,7 @@ sql_statement="""INSERT INTO FACTS (t, node, point, watts)
 wattage_keys = (
     'power.cpu_watts', 'power.memory_watts', 'power.node_watts',
     )
-db_keys = ('cpu', 'memory', 'node', )
+db_keys = ('c', 'm', 't', )
 db_names = dict(zip(wattage_keys, db_keys))
 
 ##################################################
