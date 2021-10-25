@@ -1,6 +1,6 @@
 CREATE TABLE facts (
     t INTEGER,
-    node VARCHAR(10),
+    node INTEGER,
     point CHAR(1),
     watts INTEGER
     );

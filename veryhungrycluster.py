@@ -11,6 +11,7 @@ import time
 from   dorunrun import dorunrun, ExitCode
 import linuxutils
 from   sqlitedb import SQLiteDB
+from   urdecorators import show_exceptions_and_frames as trap
 
 #################################################
 # This program has a lot of static data
@@ -60,7 +61,7 @@ def handler(signum:int, stack:object=None) -> None:
         return
 
 
-def collect_power_data(db:object, nodenames:str) -> int:
+def collect_power_data(db:object, nodenames:str, node_dict:dict) -> int:
     """
     Use ACT's tools to poll the nodes and write the fact table
     of the database.
@@ -81,12 +82,13 @@ def collect_power_data(db:object, nodenames:str) -> int:
     for k, v in wattage.items():
         point = db_names[k]
         for kk, vv in v.items():
-            db.execute_SQL(sql_statement, t, kk, point, vv)
+            db.execute_SQL(sql_statement, t, node_dict[kk], point, vv)
         db.commit()
         
     return os.EX_OK
 
 
+@trap
 def veryhungrycluster_main(myargs:argparse.Namespace) -> int:
     """
     This function just manages the loop. 
@@ -95,9 +97,12 @@ def veryhungrycluster_main(myargs:argparse.Namespace) -> int:
 
     # Get an explicit list of node names in case the "all" 
     # partition is undefined in this environment.
-    nodenames = ",".join(dorunrun(
-        'sinfo -o "%n"', return_datatype=str).split('\n')[1:]
-        )
+    nodeinfo = dorunrun('sinfo -o "%n"', 
+        return_datatype=str).strip().split('\n')[1:]
+    nodenames = ",".join(nodeinfo)
+    nodenumbers = tuple([ int(_[-2:]) for _ in nodeinfo ]) 
+    node_dict = dict(zip(nodeinfo, nodenumbers))
+
     myargs.verbose and print(f"querying {nodenames}")
     db_handle = db = SQLiteDB(myargs.db)
     myargs.verbose and print(f"Database {myargs.db} open")
@@ -106,7 +111,7 @@ def veryhungrycluster_main(myargs:argparse.Namespace) -> int:
     n=0
     while not error and n < myargs.n:
         n += 1
-        error = collect_power_data(db, nodenames)
+        error = collect_power_data(db, nodenames, node_dict)
         time.sleep(myargs.freq)
     
     return error
