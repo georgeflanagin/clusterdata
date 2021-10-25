@@ -3,7 +3,14 @@ Maintain a database of power consumption on an ACT cluster
 
 ## Usage
 
+### To start the program
+
 `nohup python veryhungrycluster.py [-opts] >/dev/null &`
+
+### To stop the program (gracefully)
+
+`kill -15 PID-of-veryhungrycluster`
+
 
 ## Options
 
@@ -22,5 +29,6 @@ The default name is `power.db`.
 The database is just a flying fact table, keyed on time stamp. The other 
 columns represent the node name, the measurement point, and the watts consumed.
 
-To create a new database, `sqlite3 {db name} < power.sql
+To create a new database, `sqlite3 {db name} < power.sql`
+
 

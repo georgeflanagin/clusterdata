@@ -134,6 +134,7 @@ if __name__=='__main__':
 
     myargs = parser.parse_args()
     linuxutils.dump_cmdline(myargs)
+    linuxutils.setproctitle('veryhungrycluster')
 
     for _ in caught_signals:
         try:
