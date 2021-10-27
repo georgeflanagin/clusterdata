@@ -32,7 +32,16 @@ __license__ = 'MIT'
 
 
 def readpower_main(myargs:argparse.Namespace) -> int:
+
+    earliest = 0 if not myargs.time else time.time() - myargs.time*24*60*60
     
+    where_clauses = {
+        "node":"node = ?",
+        "point":"point = ?"
+        "time":f"t > {earliest}"
+        }
+
+
     db=SQLiteDB(myargs.db)
     frame=pandas.read_sql("select * from facts", db.db)
     print(frame)
@@ -47,6 +56,24 @@ if __name__=='__main__':
     
     parser.add_argument('--db', type=str, default='power.db',
         help='name of database (default:"power.db")')
+
+    parser.add_argument('--format', type=str, default="csv",
+        choices=("csv", "pandas"),
+        help="csv or pandas output.")
+
+    parser.add_argument('-n', '--node', type=int, default=0,
+        help='node number to investigate (default is all)')
+
+    parser.add_argument('-o', '--output', type=str, default="",
+        help='name of output file for extracted data.')
+
+    parser.add_argument('-p', '--point', type=str, default="",
+        choices=('c', 'm', 't'),
+        help='measurement point to consider (default is all)')
+
+    parser.add_argument('-t', '--time', type=int, default=1,
+        help='number of recent 24-hour periods to consider (default=1)')
+
     parser.add_argument('-v', '--verbose', action='store_true',
         help='be chatty')
 
