@@ -34,7 +34,6 @@ __license__ = 'MIT'
 def readpower_main(myargs:argparse.Namespace) -> int:
 
     earliest = 0 if not myargs.time else time.time() - myargs.time*24*60*60
-    o_file = 'facts.csv' if not myargs.output else myargs.output
     
     SQL = f"select * from facts where t > {earliest} " 
     if myargs.node: SQL += f" and node in ({','.join(myargs.node)}) "
@@ -45,9 +44,10 @@ def readpower_main(myargs:argparse.Namespace) -> int:
     db=SQLiteDB(myargs.db)
     frame=pandas.read_sql(SQL, db.db)
     if myargs.format == 'csv':
-        frame.to_csv(o_file)
+        frame['t'] = pandas.to_datetime(frame['t'], unit='s')
+        frame.to_csv(myargs.output, index=False)
     else:
-        frame.to_pickle(o_file)
+        frame.to_pickle(myargs.output)
 
     return os.EX_OK
 
@@ -68,7 +68,7 @@ if __name__=='__main__':
         action='append',
         help='node number to investigate (default is all)')
 
-    parser.add_argument('-o', '--output', type=str, default="",
+    parser.add_argument('-o', '--output', type=str, default="facts.csv",
         help='name of output file for extracted data.')
 
     parser.add_argument('-p', '--point', type=str, default="",
