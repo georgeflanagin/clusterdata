@@ -37,7 +37,7 @@ def readpower_main(myargs:argparse.Namespace) -> int:
     o_file = 'facts.csv' if not myargs.output else myargs.output
     
     SQL = f"select * from facts where t > {earliest} " 
-    if myargs.node: SQL += f" and node = {myargs.node} "
+    if myargs.node: SQL += f" and node in ({','.join(myargs.node)}) "
     if myargs.point: SQL += f" and point = '{myargs.point}' "
     SQL += " order by t asc"
     myargs.verbose and print(SQL)
@@ -64,7 +64,8 @@ if __name__=='__main__':
         choices=("csv", "pandas"),
         help="csv or pandas output.")
 
-    parser.add_argument('-n', '--node', type=int, default=0,
+    parser.add_argument('-n', '--node', default=[],
+        action='append',
         help='node number to investigate (default is all)')
 
     parser.add_argument('-o', '--output', type=str, default="",
