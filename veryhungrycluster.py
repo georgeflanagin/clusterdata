@@ -7,6 +7,7 @@ import sys
 
 import argparse
 import json
+import random
 import shutil
 import signal
 import time
@@ -114,6 +115,15 @@ def collect_power_data(db:object, node_dict:dict) -> int:
     return os.EX_OK
 
 
+def dither_time(t:int) -> int:
+    """
+    Avoid measuring the power at regular intervals.
+    """
+    lower = int(t * 0.95)
+    upper = int(t * 1.05)
+    while True:
+        yield random.randint(lower, upper)    
+
 @trap
 def veryhungrycluster_main(myargs:argparse.Namespace) -> int:
     """
@@ -138,10 +148,12 @@ def veryhungrycluster_main(myargs:argparse.Namespace) -> int:
     
     error=0
     n=0
+    dither_iter = dither_time(myargs.freq)
+
     while not error and n < myargs.n:
         n += 1
         error = collect_power_data(db, node_dict)
-        time.sleep(myargs.freq)
+        time.sleep(next(dither_iter))
     
     return error
     

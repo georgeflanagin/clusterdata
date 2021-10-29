@@ -34,17 +34,20 @@ __license__ = 'MIT'
 def readpower_main(myargs:argparse.Namespace) -> int:
 
     earliest = 0 if not myargs.time else time.time() - myargs.time*24*60*60
+    o_file = 'facts.csv' if not myargs.output else myargs.output
     
-    where_clauses = {
-        "node":"node = ?",
-        "point":"point = ?"
-        "time":f"t > {earliest}"
-        }
-
+    SQL = f"select * from facts where t > {earliest} " 
+    if myargs.node: SQL += f" and node = {myargs.node} "
+    if myargs.point: SQL += f" and point = '{myargs.point}' "
+    SQL += " order by t asc"
+    myargs.verbose and print(SQL)
 
     db=SQLiteDB(myargs.db)
-    frame=pandas.read_sql("select * from facts", db.db)
-    print(frame)
+    frame=pandas.read_sql(SQL, db.db)
+    if myargs.format == 'csv':
+        frame.to_csv(o_file)
+    else:
+        frame.to_pickle(o_file)
 
     return os.EX_OK
 
@@ -78,6 +81,6 @@ if __name__=='__main__':
         help='be chatty')
 
     myargs = parser.parse_args()
-    linuxutils.dump_cmdline(myargs)
+    myargs.verbose and linuxutils.dump_cmdline(myargs)
 
     sys.exit(readpower_main(myargs))
