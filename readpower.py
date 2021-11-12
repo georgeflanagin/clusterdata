@@ -8,6 +8,12 @@ import sys
 import argparse
 import json
 import pandas
+try:
+    import pyarrow
+    no_pyarrow = False
+except ImportError as e:
+    sys.write("The feather dataformat is unavailable")
+    no_pyarrow = True
 import shutil
 import signal
 import time
@@ -30,7 +36,6 @@ __email__ = ['me@georgeflanagin.com', 'gflanagin@richmond.edu']
 __status__ = 'Early production'
 __license__ = 'MIT'
 
-
 def readpower_main(myargs:argparse.Namespace) -> int:
 
     earliest = 0 if not myargs.time else time.time() - myargs.time*24*60*60
@@ -43,11 +48,13 @@ def readpower_main(myargs:argparse.Namespace) -> int:
 
     db=SQLiteDB(myargs.db)
     frame=pandas.read_sql(SQL, db.db)
-    if myargs.format == 'csv':
-        frame['t'] = pandas.to_datetime(frame['t'], unit='s')
-        frame.to_csv(myargs.output, index=False)
-    else:
-        frame.to_pickle(myargs.output)
+    frame['t'] = pandas.to_datetime(frame['t'], unit='s')
+    frame.rename({'t':'time_utc'}, axis=1)
+    frame['point'] = frame['point'].str.replace('c', 'cpu')
+    frame['point'] = frame['point'].str.replace('m', 'mem')
+    frame['point'] = frame['point'].str.replace('t', 'total')
+
+    getattr(frame, f"to_{myargs.format}")(f"{myargs.output}.{myargs.format}")
 
     return os.EX_OK
 
@@ -60,16 +67,21 @@ if __name__=='__main__':
     parser.add_argument('--db', type=str, default='power.db',
         help='name of database (default:"power.db")')
 
-    parser.add_argument('--format', type=str, default="csv",
-        choices=("csv", "pandas"),
-        help="csv or pandas output.")
+    if no_pyarrow:
+        formats=("csv", "pandas", "stata", "parquet")
+    else
+        formats=("csv", "feather", "pandas", "stata", "parquet")
+
+    parser.add_argument('--format', type=str, default="csv", choices=formats,
+        help="Output format; default is csv")
 
     parser.add_argument('-n', '--node', default=[],
         action='append',
         help='node number to investigate (default is all)')
 
-    parser.add_argument('-o', '--output', type=str, default="facts.csv",
-        help='name of output file for extracted data.')
+    parser.add_argument('-o', '--output', type=str, default="facts",
+        help='''name of output file for extracted data. A suffix will 
+be added to reflect the data format.''')
 
     parser.add_argument('-p', '--point', type=str, default="",
         choices=('c', 'm', 't'),
@@ -83,5 +95,6 @@ if __name__=='__main__':
 
     myargs = parser.parse_args()
     myargs.verbose and linuxutils.dump_cmdline(myargs)
+    if myargs.format == 'pandas': myargs.format='pickle'
 
     sys.exit(readpower_main(myargs))
