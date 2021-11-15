@@ -69,7 +69,7 @@ if __name__=='__main__':
 
     if no_pyarrow:
         formats=("csv", "pandas", "stata", "parquet")
-    else
+    else:
         formats=("csv", "feather", "pandas", "stata", "parquet")
 
     parser.add_argument('--format', type=str, default="csv", choices=formats,
