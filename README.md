@@ -37,7 +37,7 @@ To create a new database, `sqlite3 {db name} < power.sql`
 
 ## Reading the database.
 
-The command is:
+### The command is:
 
 ```bash
 python readpower.py [-opts] 
@@ -45,22 +45,33 @@ python readpower.py [-opts]
 
 And the options are:
 
-`--db` -- name of database (default:"power.db")
+```
+  -h, --help            show this help message and exit
+  --db DB               name of database (default:"power.db")
+  --pivot               translate fact table into the usual tabular format
+  --format {csv,feather,pandas,stata,parquet}
+                        Output format; default is csv
+  -n NODE, --node NODE  node number to investigate (default is all)
+  -o OUTPUT, --output OUTPUT
+                        name of output file for extracted data. A suffix 
+                        will be added to reflect the data format.
+  -p {c,m,t}, --point {c,m,t}
+                        measurement point to consider (default is all)
+  -t TIME, --time TIME  number of recent 24-hour periods to consider (default=1)
+  -v, --verbose         be chatty
+```
 
-`--format` "csv" or "pandas" output.
+### Typical use:
 
-`-n NODE`, `--node NODE`  node number to investigate (default is all),
-    and multiple nodes may be named.
+[0] Source the readpower.sh file so that you don't have to type in
+the word python constantly and the command becomes `readpower`.
 
-`-o OUTPUT`, `--output OUTPUT` name of output file for extracted data.
-    The default value is facts.csv in the current directory.
+`source readpower.py`
 
-`-p {c,m,t}`, `--point {c,m,t}` measurement point to consider (default is all),
-    and `c` is CPU, `m` is memory, and `t` is the total for the node.
+[1] Get a sense of how the power has been for the last day, all nodes, and 
+plan to read it into Excel. Write it to a file with today's date
+embedded in the name:
 
-`-t TIME`, `--time TIME`  number of recent 24-hour periods to consider (default=1).
-    For example, if you want to look at the last week, `-t 7`
-
-`-v`, `--verbose` This will print the SQL statement and the resolved
-    command line arguments.
-
+```bash
+readpower -p t --pivot -o power.`date +%y%m%d`.csv
+```
