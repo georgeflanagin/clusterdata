@@ -6,6 +6,7 @@ import sys
 # Standard imports.
 
 import argparse
+import collections
 import json
 import pandas
 try:
@@ -36,6 +37,24 @@ __email__ = ['me@georgeflanagin.com', 'gflanagin@richmond.edu']
 __status__ = 'Early production'
 __license__ = 'MIT'
 
+
+def pivot(myargs:argparse.Namespace, frame:pandas.DataFrame) -> pandas.DataFrame:
+    """
+    Translate the fact table.
+    """
+    column_data = collections.defaultdict(pandas.Series)
+    for node_number in myargs.node:
+        new_frame = frame[frame['node']==int(node_number)]
+        column_data[node_number] = pandas.Series(new_frame['watts'].values, index=new_frame['t'], name=str(node_number))
+
+    new_frame = pandas.DataFrame(column_data[myargs.node[0]])
+    for node_number in myargs.node[1:]:
+        new_frame = new_frame.join(column_data[node_number])
+
+    return new_frame
+        
+
+
 def readpower_main(myargs:argparse.Namespace) -> int:
 
     earliest = 0 if not myargs.time else time.time() - myargs.time*24*60*60
@@ -49,11 +68,17 @@ def readpower_main(myargs:argparse.Namespace) -> int:
     db=SQLiteDB(myargs.db)
     frame=pandas.read_sql(SQL, db.db)
     frame['t'] = pandas.to_datetime(frame['t'], unit='s')
-    frame.rename({'t':'time_utc'}, axis=1)
-    frame['point'] = frame['point'].str.replace('c', 'cpu')
-    frame['point'] = frame['point'].str.replace('m', 'mem')
-    frame['point'] = frame['point'].str.replace('t', 'total')
 
+
+    
+    if myargs.point and myargs.pivot and len(myargs.node) > 1:
+        frame = pivot(myargs, frame)
+    else:
+        frame['point'] = frame['point'].str.replace('c', 'cpu')
+        frame['point'] = frame['point'].str.replace('m', 'mem')
+        frame['point'] = frame['point'].str.replace('t', 'total')
+    
+    frame.index.name = 'time_utc'
     getattr(frame, f"to_{myargs.format}")(f"{myargs.output}.{myargs.format}")
 
     return os.EX_OK
@@ -72,10 +97,13 @@ if __name__=='__main__':
     else:
         formats=("csv", "feather", "pandas", "stata", "parquet")
 
+    parser.add_argument('--pivot', action='store_true', 
+        help='translate fact table into the usual tabular format')
+
     parser.add_argument('--format', type=str, default="csv", choices=formats,
         help="Output format; default is csv")
 
-    parser.add_argument('-n', '--node', default=[],
+    parser.add_argument('-n', '--node', default=[ str(_) for _ in list(range(1,19))+list(range(50,62)) ],
         action='append',
         help='node number to investigate (default is all)')
 
