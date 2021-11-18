@@ -73,5 +73,11 @@ plan to read it into Excel. Write it to a file with today's date
 embedded in the name:
 
 ```bash
-readpower -p t --pivot -o power.`date +%y%m%d`.csv
+readpower -p t --pivot -o power.`date +%y%m%d`
+```
+
+[2] Do the same, but for the past week, and you plan to use STATA:
+
+```bash
+readpower -p t --pivot --format stata -o power.`date +%y%m%d`
 ```
