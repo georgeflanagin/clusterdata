@@ -38,19 +38,32 @@ __status__ = 'Early production'
 __license__ = 'MIT'
 
 
+####
+# Globals
+####
+# Make all_nodes a tuple so that it is immutable.
+####
+all_nodes = tuple([ str(_) for _ in list(range(1,19))+list(range(50,62)) ])
+
+
 def pivot(myargs:argparse.Namespace, frame:pandas.DataFrame) -> pandas.DataFrame:
     """
     Translate the fact table.
     """
     column_data = collections.defaultdict(pandas.Series)
     for node_number in myargs.node:
+        myargs.verbose and print(f"filtering node {node_number}")
         new_frame = frame[frame['node']==int(node_number)]
-        column_data[node_number] = pandas.Series(new_frame['watts'].values, index=new_frame['t'], name=str(node_number))
+        column_data[node_number] = pandas.Series(new_frame['watts'].values, 
+            index=new_frame['t'], 
+            name=str(node_number))
 
     new_frame = pandas.DataFrame(column_data[myargs.node[0]])
     for node_number in myargs.node[1:]:
+        myargs.verbose and print(f"joining node {node_number}")
         new_frame = new_frame.join(column_data[node_number])
 
+    myargs.verbose and print("Pivot complete.")
     return new_frame
         
 
@@ -60,27 +73,32 @@ def readpower_main(myargs:argparse.Namespace) -> int:
     earliest = 0 if not myargs.time else time.time() - myargs.time*24*60*60
     
     SQL = f"select * from facts where t > {earliest} " 
-    if myargs.node: SQL += f" and node in ({','.join(myargs.node)}) "
+    if myargs.node != all_nodes: SQL += f" and node in ({','.join(myargs.node)}) "
     if myargs.point: SQL += f" and point = '{myargs.point}' "
-    SQL += " order by t asc"
+    SQL += " order by t asc, node asc"
     myargs.verbose and print(SQL)
 
     db=SQLiteDB(myargs.db)
+    myargs.verbose and print("Database opened.")
+
     frame=pandas.read_sql(SQL, db.db)
+    myargs.verbose and print(f"Data read. {frame.shape=}")
     frame['t'] = pandas.to_datetime(frame['t'], unit='s')
+    myargs.verbose and print("ISO seconds converted to timestamp")
 
-
-    
     if myargs.point and myargs.pivot and len(myargs.node) > 1:
+        myargs.verbose and print("Calling pivot")
         frame = pivot(myargs, frame)
+        myargs.verbose and print("Pivoted.")
     else:
         frame['point'] = frame['point'].str.replace('c', 'cpu')
         frame['point'] = frame['point'].str.replace('m', 'mem')
         frame['point'] = frame['point'].str.replace('t', 'total')
     
     frame.index.name = 'time_utc'
+    myargs.verbose and print("re-indexed")
     getattr(frame, f"to_{myargs.format}")(f"{myargs.output}.{myargs.format}")
-
+    myargs.verbose and print(f"output written to {myargs.output}.{myargs.format}")
     return os.EX_OK
 
 
@@ -103,7 +121,7 @@ if __name__=='__main__':
     parser.add_argument('--format', type=str, default="csv", choices=formats,
         help="Output format; default is csv")
 
-    parser.add_argument('-n', '--node', default=[ str(_) for _ in list(range(1,19))+list(range(50,62)) ],
+    parser.add_argument('-n', '--node', default=all_nodes,
         action='append',
         help='node number to investigate (default is all)')
 
