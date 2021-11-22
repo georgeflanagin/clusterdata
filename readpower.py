@@ -44,6 +44,20 @@ __license__ = 'MIT'
 # Make all_nodes a tuple so that it is immutable.
 ####
 all_nodes = tuple([ str(_) for _ in list(range(1,19))+list(range(50,62)) ])
+idle_power = tuple(115, 115, 115, 115, 115, 115, 115, 115,  # basic
+    120, 120, 120, 120, 120, # medium
+    135, 135, # large
+    425, # ML
+    850, 850, # sci
+    115, # bukach
+    135, 135, # dias
+    120, # erickson
+    115, # johnson
+    120, 120, 120, 120, # parish
+    135, # yang1
+    115, # yang2
+    115) # yangnolin
+biases = dict(zip(all_nodes, idle_power))    
 
 
 def pivot(myargs:argparse.Namespace, frame:pandas.DataFrame) -> pandas.DataFrame:
@@ -113,6 +127,9 @@ if __name__=='__main__':
     else:
         formats=("csv", "feather", "pandas", "stata", "parquet")
 
+    parser.add_argument('--bias', action='store_true', 
+        help="bias removes the idle power from the readings of the node-total.")
+    
     parser.add_argument('--pivot', action='store_true', 
         help='translate fact table into the usual tabular format')
 
