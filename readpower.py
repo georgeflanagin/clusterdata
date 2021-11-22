@@ -58,10 +58,8 @@ def pivot(myargs:argparse.Namespace, frame:pandas.DataFrame) -> pandas.DataFrame
             index=new_frame['t'], 
             name=str(node_number))
 
-    new_frame = pandas.DataFrame(column_data[myargs.node[0]])
-    for node_number in myargs.node[1:]:
-        myargs.verbose and print(f"joining node {node_number}")
-        new_frame = new_frame.join(column_data[node_number])
+    myargs.verbose and print("Building pivot table with concat")
+    new_frame = pandas.concat([ c for c in column_data.values() ], axis=1)
 
     myargs.verbose and print("Pivot complete.")
     return new_frame
