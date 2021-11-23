@@ -12,9 +12,12 @@ import pandas
 try:
     import pyarrow
     no_pyarrow = False
+    formats=("csv", "feather", "pandas", "stata", "parquet")
 except ImportError as e:
     sys.write("The feather dataformat is unavailable")
     no_pyarrow = True
+    formats=("csv", "pandas", "stata", "parquet")
+
 import shutil
 import signal
 import time
@@ -41,10 +44,11 @@ __license__ = 'MIT'
 ####
 # Globals
 ####
-# Make all_nodes a tuple so that it is immutable.
+# Make all_nodes a tuple so that it is immutable. Create a zip/dict
+# of all the background power consumption.
 ####
 all_nodes = tuple([ str(_) for _ in list(range(1,19))+list(range(50,62)) ])
-idle_power = tuple(115, 115, 115, 115, 115, 115, 115, 115,  # basic
+idle_power = tuple([115, 115, 115, 115, 115, 115, 115, 115,  # basic
     120, 120, 120, 120, 120, # medium
     135, 135, # large
     425, # ML
@@ -56,7 +60,7 @@ idle_power = tuple(115, 115, 115, 115, 115, 115, 115, 115,  # basic
     120, 120, 120, 120, # parish
     135, # yang1
     115, # yang2
-    115) # yangnolin
+    115]) # yangnolin
 biases = dict(zip(all_nodes, idle_power))    
 
 
@@ -78,7 +82,6 @@ def pivot(myargs:argparse.Namespace, frame:pandas.DataFrame) -> pandas.DataFrame
     myargs.verbose and print("Pivot complete.")
     return new_frame
         
-
 
 def readpower_main(myargs:argparse.Namespace) -> int:
 
@@ -119,19 +122,12 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser(prog='readpower', 
         description='analyze the power data we have written.')
     
+    parser.add_argument('--bias', action='store_true', 
+        help="""bias removes the idle power from the readings of the node-total.
+This setting only makes sense if the total is being read.""")
+    
     parser.add_argument('--db', type=str, default='power.db',
         help='name of database (default:"power.db")')
-
-    if no_pyarrow:
-        formats=("csv", "pandas", "stata", "parquet")
-    else:
-        formats=("csv", "feather", "pandas", "stata", "parquet")
-
-    parser.add_argument('--bias', action='store_true', 
-        help="bias removes the idle power from the readings of the node-total.")
-    
-    parser.add_argument('--pivot', action='store_true', 
-        help='translate fact table into the usual tabular format')
 
     parser.add_argument('--format', type=str, default="csv", choices=formats,
         help="Output format; default is csv")
@@ -148,14 +144,29 @@ be added to reflect the data format.''')
         choices=('c', 'm', 't'),
         help='measurement point to consider (default is all)')
 
+    parser.add_argument('--pivot', action='store_true', 
+        help='translate fact table into the usual tabular format')
+
     parser.add_argument('-t', '--time', type=int, default=1,
         help='number of recent 24-hour periods to consider (default=1)')
+
+    parser.add_argument('--totals', action='store_true',
+        help="equivalent to all nodes and --point t")
 
     parser.add_argument('-v', '--verbose', action='store_true',
         help='be chatty')
 
     myargs = parser.parse_args()
-    myargs.verbose and linuxutils.dump_cmdline(myargs)
+
+    # A little semantic checking is required.
     if myargs.format == 'pandas': myargs.format='pickle'
+    if myargs.totals: 
+        myargs.node = all_nodes
+        myargs.point = 't'
+    if myargs.bias and 't' not in myargs.point:
+        print("--bias cannot be used unless the total is being read.")
+        parser.print_help()
+
+    myargs.verbose and linuxutils.dump_cmdline(myargs)
 
     sys.exit(readpower_main(myargs))
