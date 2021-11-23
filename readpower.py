@@ -66,8 +66,10 @@ biases = dict(zip(all_nodes, idle_power))
 
 def pivot(myargs:argparse.Namespace, frame:pandas.DataFrame) -> pandas.DataFrame:
     """
-    Translate the fact table.
+    Translate the fact table, and apply biases if requested.
     """
+    global biases
+
     column_data = collections.defaultdict(pandas.Series)
     for node_number in myargs.node:
         myargs.verbose and print(f"filtering node {node_number}")
@@ -75,9 +77,13 @@ def pivot(myargs:argparse.Namespace, frame:pandas.DataFrame) -> pandas.DataFrame
         column_data[node_number] = pandas.Series(new_frame['watts'].values, 
             index=new_frame['t'], 
             name=str(node_number))
+        if myargs.bias: 
+            column_data[node_number] = column_data[node_number].subtract(
+                                        biases[node_number], fill_value=0)
 
     myargs.verbose and print("Building pivot table with concat")
     new_frame = pandas.concat([ c for c in column_data.values() ], axis=1)
+    if myargs.bias: new_frame[new_frame < 0] = 0
 
     myargs.verbose and print("Pivot complete.")
     return new_frame
@@ -140,9 +146,9 @@ This setting only makes sense if the total is being read.""")
         help='''name of output file for extracted data. A suffix will 
 be added to reflect the data format.''')
 
-    parser.add_argument('-p', '--point', type=str, default="",
+    parser.add_argument('-p', '--point', type=str, default="t",
         choices=('c', 'm', 't'),
-        help='measurement point to consider (default is all)')
+        help='measurement point to consider (default is "t", for total)')
 
     parser.add_argument('--pivot', action='store_true', 
         help='translate fact table into the usual tabular format')
