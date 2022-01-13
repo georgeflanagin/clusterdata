@@ -32,7 +32,7 @@ from   urdecorators import show_exceptions_and_frames as trap
 # Credits
 ###
 __author__ = 'George Flanagin'
-__copyright__ = 'Copyright 2021'
+__copyright__ = 'Copyright 2021, University of Richmond'
 __credits__ = None
 __version__ = 1.0
 __maintainer__ = 'George Flanagin'
@@ -61,14 +61,14 @@ idle_power = tuple([115, 115, 115, 115, 115, 115, 115, 115,  # basic
     135, # yang1
     115, # yang2
     115]) # yangnolin
-biases = dict(zip(all_nodes, idle_power))    
+tares = dict(zip(all_nodes, idle_power))    
 
 
 def pivot(myargs:argparse.Namespace, frame:pandas.DataFrame) -> pandas.DataFrame:
     """
-    Translate the fact table, and apply biases if requested.
+    Translate the fact table, and apply tare if requested.
     """
-    global biases
+    global tares
 
     column_data = collections.defaultdict(pandas.Series)
     for node_number in myargs.node:
@@ -77,13 +77,14 @@ def pivot(myargs:argparse.Namespace, frame:pandas.DataFrame) -> pandas.DataFrame
         column_data[node_number] = pandas.Series(new_frame['watts'].values, 
             index=new_frame['t'], 
             name=str(node_number))
-        if myargs.bias: 
+        if myargs.tare: 
             column_data[node_number] = column_data[node_number].subtract(
-                                        biases[node_number], fill_value=0)
+                                        tares[node_number], fill_value=0)
 
     myargs.verbose and print("Building pivot table with concat")
     new_frame = pandas.concat([ c for c in column_data.values() ], axis=1)
-    if myargs.bias: new_frame[new_frame < 0] = 0
+    new_frame['cluster'] = new_frame.sum(axis=1)
+    if myargs.tare: new_frame[new_frame < 0] = 0
 
     myargs.verbose and print("Pivot complete.")
     return new_frame
@@ -118,6 +119,9 @@ def readpower_main(myargs:argparse.Namespace) -> int:
     
     frame.index.name = 'time_utc'
     myargs.verbose and print("re-indexed")
+    if myargs.summarize:
+        summary_frame = pandas.concat([frame['cluster']], axis=1)
+        frame = summary_frame
     getattr(frame, f"to_{myargs.format}")(f"{myargs.output}.{myargs.format}")
     myargs.verbose and print(f"output written to {myargs.output}.{myargs.format}")
     return os.EX_OK
@@ -127,10 +131,6 @@ if __name__=='__main__':
 
     parser = argparse.ArgumentParser(prog='readpower', 
         description='analyze the power data we have written.')
-    
-    parser.add_argument('--bias', action='store_true', 
-        help="""bias removes the idle power from the readings of the node-total.
-This setting only makes sense if the total is being read.""")
     
     parser.add_argument('--db', type=str, default='power.db',
         help='name of database (default:"power.db")')
@@ -153,9 +153,16 @@ be added to reflect the data format.''')
     parser.add_argument('--pivot', action='store_true', 
         help='translate fact table into the usual tabular format')
 
+    parser.add_argument('-s', '--summarize', action='store_true',
+        help='cluster total power against time, ONLY')
+
     parser.add_argument('-t', '--time', type=int, default=1,
         help='number of recent 24-hour periods to consider (default=1)')
 
+    parser.add_argument('--tare', action='store_true', 
+        help="""--tare removes the idle power from the readings of the node-total.
+This setting only makes sense if the total is being read.""")
+    
     parser.add_argument('--totals', action='store_true',
         help="equivalent to all nodes and --point t")
 
@@ -169,8 +176,8 @@ be added to reflect the data format.''')
     if myargs.totals: 
         myargs.node = all_nodes
         myargs.point = 't'
-    if myargs.bias and 't' not in myargs.point:
-        print("--bias cannot be used unless the total is being read.")
+    if myargs.tare and 't' not in myargs.point:
+        print("--tare cannot be used unless the total is being read.")
         parser.print_help()
 
     myargs.verbose and linuxutils.dump_cmdline(myargs)
