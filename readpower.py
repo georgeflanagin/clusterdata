@@ -61,8 +61,23 @@ idle_power = tuple([115, 115, 115, 115, 115, 115, 115, 115,  # basic
     135, # yang1
     115, # yang2
     115]) # yangnolin
+max_power = tuple([650, 650, 650, 650, 650, 650, 650, 650,  # basic
+    700, 700, 700, 700, 700, # medium
+    800, 800, # large
+    1000, # ML
+    2000, 2000, # sci
+    650, # bukach
+    800, 800, # dias
+    700, # erickson
+    650, # johnson
+    700, 700, 700, 700, # parish
+    800, # yang1
+    650, # yang2
+    650]) # yangnolin
 tares = dict(zip(all_nodes, idle_power))    
-
+limits = dict(zip(all_nodes, max_power))
+cluster_max = sum(max_power)
+cluster_tare = sum(idle_power)
 
 def pivot(myargs:argparse.Namespace, frame:pandas.DataFrame) -> pandas.DataFrame:
     """
@@ -91,23 +106,41 @@ def pivot(myargs:argparse.Namespace, frame:pandas.DataFrame) -> pandas.DataFrame
         
 
 def readpower_main(myargs:argparse.Namespace) -> int:
+    """
+    Because of the need to dynamically build the SQL used
+    to retrieve the pandas data, this function is a little
+    klutzy compared with most of the _main functions in 
+    command line utilities.
+    """
 
+    # time == 0 means all the records in the database.
     earliest = 0 if not myargs.time else time.time() - myargs.time*24*60*60
     
+    # The messy construction of the SQL.
     SQL = f"select * from facts where t > {earliest} " 
     if myargs.node != all_nodes: SQL += f" and node in ({','.join(myargs.node)}) "
     if myargs.point: SQL += f" and point = '{myargs.point}' "
     SQL += " order by t asc, node asc"
     myargs.verbose and print(SQL)
 
+    # Open the database.
     db=SQLiteDB(myargs.db)
     myargs.verbose and print("Database opened.")
 
+    # Get the data.
     frame=pandas.read_sql(SQL, db.db)
     myargs.verbose and print(f"Data read. {frame.shape=}")
     frame['t'] = pandas.to_datetime(frame['t'], unit='s')
     myargs.verbose and print("ISO seconds converted to timestamp")
 
+    # See if we need to save the raw pandas data.
+    if myargs.save_frame:
+        frame_file = 'rawframe.csv'
+        os.path.exists(frame_file) and os.unlink(frame_file)
+        frame.to_csv(frame_file, index=False)
+
+    # There are two different operations here. One is to pivot
+    # and summarize, and the other is to retain the fact table.
     if myargs.point and myargs.pivot and len(myargs.node) > 1:
         myargs.verbose and print("Calling pivot")
         frame = pivot(myargs, frame)
@@ -117,11 +150,18 @@ def readpower_main(myargs:argparse.Namespace) -> int:
         frame['point'] = frame['point'].str.replace('m', 'mem')
         frame['point'] = frame['point'].str.replace('t', 'total')
     
+    # Set the index. 
     frame.index.name = 'time_utc'
     myargs.verbose and print("re-indexed")
     if myargs.summarize:
         summary_frame = pandas.concat([frame['cluster']], axis=1)
         frame = summary_frame
+        if myargs.percent:
+            frame = frame.div(cluster_max/200)
+            
+
+    # Based on what is desired as output, call the appropriate 
+    # function. 
     getattr(frame, f"to_{myargs.format}")(f"{myargs.output}.{myargs.format}")
     myargs.verbose and print(f"output written to {myargs.output}.{myargs.format}")
     return os.EX_OK
@@ -150,11 +190,17 @@ be added to reflect the data format.''')
         choices=('c', 'm', 't'),
         help='measurement point to consider (default is "t", for total)')
 
+    parser.add_argument('--percent', action='store_true',
+        help='fractional measure of usage. Note: *can* exceed 100%')
+
     parser.add_argument('--pivot', action='store_true', 
         help='translate fact table into the usual tabular format')
 
     parser.add_argument('-s', '--summarize', action='store_true',
         help='cluster total power against time, ONLY')
+
+    parser.add_argument('--save-frame', action='store_true',
+        help='save the pandas DataFrame to disc for later use.')
 
     parser.add_argument('-t', '--time', type=int, default=1,
         help='number of recent 24-hour periods to consider (default=1)')

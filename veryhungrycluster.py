@@ -100,7 +100,7 @@ def collect_power_data(db:object, node_dict:dict) -> int:
     # The times for reading each node are not significantly
     # different from each other, so take the first one.
     #########################################################
-    t = int(list(blob['_timestamp'].values())[0])
+    t = int(time.time())
 
     #########################################################
     # Use a dict comprehension to reduce the bulk of the reply.
@@ -123,6 +123,7 @@ def dither_time(t:int) -> int:
     upper = int(t * 1.05)
     while True:
         yield random.randint(lower, upper)    
+
 
 @trap
 def veryhungrycluster_main(myargs:argparse.Namespace) -> int:

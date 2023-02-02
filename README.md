@@ -79,5 +79,5 @@ readpower -p t --pivot -o power.`date +%y%m%d`
 [2] Do the same, but for the past week, and you plan to use STATA:
 
 ```bash
-readpower -p t --pivot --format stata -o power.`date +%y%m%d`
+readpower -p t -t 7 --pivot --format stata -o power.`date +%y%m%d`
 ```
