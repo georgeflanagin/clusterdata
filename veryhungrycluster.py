@@ -39,22 +39,44 @@ caught_signals = [  signal.SIGINT, signal.SIGQUIT,
                     signal.SIGUSR1, signal.SIGUSR2, signal.SIGTERM ]
 
 # This is the ACT program that gathers data from nodes.
-exe=shutil.which('cv-stats')
+cv_stats = shutil.which('cv-stats')
+sinfo = shutil.which('sinfo')
 # Request the info in JSON.
-exe_statement=f"{exe} --nodes {{}} --format json"
+exe_statements={
+    'node_stats' : f"{cv_stats} --nodes {{}} --format json",
+    'node_list' : f"{sinfo} -o %n" 
+    }
 
 # There is only one thing we do; insert a few rows.
-sql_statement="""INSERT INTO FACTS (t, node, point, watts) 
-    VALUES (?, ?, ?, ?)"""
+sql_statements = {
+    'watts', """INSERT INTO FACTS (t, node, point, watts) VALUES (?, ?, ?, ?)""",
+    'temps', """INSERT INTO TEMPS (node, air_in, air_out) VALUES (?, ?, ?)"""
+    }
 
 # These are what we search for in the JSON blob.
 wattage_keys = (
-    'power.cpu_watts', 'power.memory_watts', 'power.node_watts',
+    'power.cpu_watts', 'power.memory_watts', 'power.node_watts'
+    )
+
+temperature_keys = (
+    'temperature[device=Front Panel Temp,unit=degrees C].temperature_value',
+    'temperature[device=Exit Air Temp,unit=degrees C].temperature_value'
     )
 
 # Shorter names in the database.
-db_keys = ('c', 'm', 't', )
+db_keys = ('c', 'm', 't') 
 db_names = dict(zip(wattage_keys, db_keys))
+
+
+# CREATE TABLE if not exists temps (
+#     t INTEGER,
+#     node INTEGER,
+#     air_in FLOAT,
+#     air_out FLOAT
+#     );
+
+db_temp_keys = ('air_in', 'air_out')
+db_temp_names = dict(zip(temperature_keys, db_temp_keys)
 
 ##################################################
 # There are only two globals, and this one is needed
@@ -87,7 +109,7 @@ def handler(signum:int, stack:object=None) -> None:
         return
 
 
-def collect_power_data(db:object, node_dict:dict) -> int:
+def collect_data(db:object, node_dict:dict) -> int:
     """
     Use ACT's tools to poll the nodes and write the fact table
     of the database.
@@ -98,7 +120,7 @@ def collect_power_data(db:object, node_dict:dict) -> int:
 
     #########################################################
     # The times for reading each node are not significantly
-    # different from each other, so take the first one.
+    # different from each other, so let's go with "now." 
     #########################################################
     t = int(time.time())
 
@@ -106,11 +128,17 @@ def collect_power_data(db:object, node_dict:dict) -> int:
     # Use a dict comprehension to reduce the bulk of the reply.
     #########################################################
     wattage = {k:v for k, v in blob.items() if k in wattage_keys}
+    temps = {k:v for k,v in blob.items() if k in temperature_keys}
+
+    # The wattage table is normalized. 
     for k, v in wattage.items():
         point = db_names[k]
         for kk, vv in v.items():
             db.execute_SQL(sql_statement, t, node_dict[kk], point, vv)
         db.commit()
+
+    # The temperature table is not /completely/ normalized.
+    temperatures_by_node = join_dicts_by_key(temps)
         
     return os.EX_OK
 
@@ -126,6 +154,22 @@ def dither_time(t:int) -> int:
 
 
 @trap
+def join_dicts_by_key(*my_dicts) -> dict:
+    """
+    Make a new dict with all the keys in my_dicts,
+    and all the values.
+    """
+
+    merged_dict = {}
+
+    for k in my_dicts[0]:
+        merged_dict[k] = tuple(d[k] for d in my_dicts)
+
+    return merged_dict
+
+
+
+@trap
 def veryhungrycluster_main(myargs:argparse.Namespace) -> int:
     """
     This function just manages the loop. 
@@ -135,6 +179,8 @@ def veryhungrycluster_main(myargs:argparse.Namespace) -> int:
 
     # Get an explicit list of node names in case the "all" 
     # partition is undefined in this environment.
+    # 
+    # The [1:] slice 
     nodeinfo = dorunrun('sinfo -o "%n"', 
         return_datatype=str).strip().split('\n')[1:]
     nodenames = ",".join(nodeinfo)
@@ -153,7 +199,7 @@ def veryhungrycluster_main(myargs:argparse.Namespace) -> int:
 
     while not error and n < myargs.n:
         n += 1
-        error = collect_power_data(db, node_dict)
+        error = collect_data(db, node_dict)
         time.sleep(next(dither_iter))
     
     return error
